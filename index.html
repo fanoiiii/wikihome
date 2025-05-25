@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Loading Wikipedia...</title>
+  <title>Smart Wikipedia Homepage</title>
+  <style>
+    body { font-family: sans-serif; padding: 2em; }
+    button { margin-right: 10px; padding: 6px 12px; }
+  </style>
   <script>
-    const bannedKeywords = [
+    const CACHE_KEY = "wiki_cache_v1";
+    const MAX_CACHE = 10;
+    const BANNED_KEYWORDS = [
       "football", "soccer", "season", "team", "league", "club", "town", "village", "municipality",
       "commune", "city", "county", "province", "suburb", "census", "parish", "historian", "biography",
       "cricketer", "baseball", "basketball", "rugby", "coach", "referee", "player", "wrestler",
@@ -14,74 +20,141 @@
       "music video", "dj", "actor", "actress", "model", "celebrity", "comedian", "stand-up",
       "filmography", "idol", "pop singer", "boy band", "girl group"
     ];
-
-    const bannedCategoryKeywords = [
+    const BANNED_CATEGORIES = [
       "footballers", "cricketers", "rugby", "basketball players", "athletes", "sportspeople", "medalists",
       "songs", "albums", "singles", "mixtapes", "music videos",
       "films", "film characters", "television", "fictional characters", "anime", "soap operas", "cartoons",
       "stubs"
     ];
+    const BOOST_KEYWORDS = ["law", "principle", "effect", "paradox"];
 
     function isFilteredTitle(title) {
       const lower = title.toLowerCase();
-      return bannedKeywords.some(kw => lower.includes(kw)) ||
+      return BANNED_KEYWORDS.some(kw => lower.includes(kw)) ||
              lower.includes("(disambiguation)") ||
              lower.startsWith("wikipedia:") || lower.startsWith("help:") || lower.startsWith("template:");
     }
 
     async function fetchCategories(title) {
-      const endpoint = "https://en.wikipedia.org/w/api.php";
-      const params = new URLSearchParams({
+      const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
         action: "query",
         prop: "categories",
         format: "json",
+        cllimit: "500",
         titles: title,
-        origin: "*",
-        cllimit: "500"
+        origin: "*"
       });
-      const res = await fetch(`${endpoint}?${params.toString()}`);
-      const data = await res.json();
-      const pages = Object.values(data.query.pages);
-      const categories = pages[0]?.categories?.map(c => c.title.toLowerCase()) || [];
-      return categories;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const pages = Object.values(data.query.pages);
+        return (pages[0]?.categories || []).map(c => c.title.toLowerCase());
+      } catch {
+        return [];
+      }
     }
 
     async function isFilteredByCategory(title) {
-      try {
-        const cats = await fetchCategories(title);
-        return cats.some(cat => bannedCategoryKeywords.some(kw => cat.includes(kw)));
-      } catch (err) {
-        console.warn("Category fetch failed:", err);
-        return false;
-      }
+      const cats = await fetchCategories(title);
+      return cats.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)));
     }
 
-    async function fetchValidArticle() {
-      const res = await fetch("https://en.wikipedia.org/w/api.php?origin=*&action=query&format=json&list=random&rnnamespace=0&rnlimit=10");
+    async function fetchRandomArticles() {
+      const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
+        action: "query",
+        format: "json",
+        list: "random",
+        rnnamespace: 0,
+        rnlimit: 10,
+        origin: "*"
+      });
+      const res = await fetch(url);
       const data = await res.json();
-      const titles = data.query.random.map(p => p.title);
+      return data.query.random.map(p => p.title);
+    }
 
+    function getCache() {
+      try {
+        return JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
+      } catch { return []; }
+    }
+
+    function setCache(arr) {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(arr.slice(0, MAX_CACHE)));
+    }
+
+    function popFromCache() {
+      const queue = getCache();
+      const next = queue.shift();
+      setCache(queue);
+      return next;
+    }
+
+    function boostSort(titles) {
+      return titles.sort((a, b) => {
+        const aBoost = BOOST_KEYWORDS.some(k => a.toLowerCase().includes(k));
+        const bBoost = BOOST_KEYWORDS.some(k => b.toLowerCase().includes(k));
+        return (bBoost - aBoost);
+      });
+    }
+
+    async function refillCache() {
+      const titles = boostSort(await fetchRandomArticles());
+      const valid = [];
       for (let title of titles) {
         if (isFilteredTitle(title)) continue;
         const filtered = await isFilteredByCategory(title);
-        if (!filtered) return title;
+        if (!filtered) valid.push(title);
+        if (valid.length >= MAX_CACHE) break;
       }
-      return null;
+      const current = getCache();
+      setCache(current.concat(valid));
+      console.log("🔄 Cache refilled with", valid.length, "new articles.");
     }
 
-    async function redirect() {
-      const title = await fetchValidArticle();
-      if (title) {
-        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(title);
+    async function startRedirect() {
+      const cached = getCache();
+      if (cached.length > 0) {
+        const next = popFromCache();
+        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next);
       } else {
-        document.body.innerText = "❌ No suitable article found. Try refreshing.";
+        document.body.innerText = "🔄 Loading new article...";
+        await refillCache();
+        startRedirect();
       }
     }
 
-    redirect();
+    function exportCache() {
+      const cache = getCache();
+      const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "cached_wikipedia_titles.txt";
+      a.click();
+    }
+
+    function manualRefresh() {
+      setCache([]);
+      refillCache();
+      alert("Cache manually refreshed.");
+    }
+
+    // On page load
+    window.addEventListener("load", () => {
+      document.getElementById("refreshBtn").onclick = manualRefresh;
+      document.getElementById("exportBtn").onclick = exportCache;
+      startRedirect();
+    });
+
+    // Periodically refill cache every 5 minutes
+    setInterval(() => {
+      if (getCache().length < MAX_CACHE) refillCache();
+    }, 1000 * 60 * 5);
   </script>
 </head>
 <body>
-  <p>🔍 Searching for a good Wikipedia article...</p>
+  <p>🔍 Loading a Wikipedia article…</p>
+  <button id="refreshBtn">🔄 Refresh Cache</button>
+  <button id="exportBtn">⬇️ Export Cache</button>
 </body>
 </html>
