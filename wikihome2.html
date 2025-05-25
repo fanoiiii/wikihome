@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Loading Wikipedia...</title>
+  <script>
+    const bannedKeywords = [
+      "football", "soccer", "season", "team", "league", "club", "town", "village", "municipality",
+      "commune", "city", "county", "province", "suburb", "census", "parish", "historian", "biography",
+      "cricketer", "baseball", "basketball", "rugby", "coach", "referee", "player", "wrestler",
+      "olympic", "athlete", "rapper", "singer", "porn", "sexual", "nudity", "NSFW", "fetish", "hentai",
+      "genital", "erotic", "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse",
+      "torture", "incest", "slavery", "necrophilia", "song", "single", "album", "mixtape", "track",
+      "music video", "dj", "actor", "actress", "model", "celebrity", "comedian", "stand-up",
+      "filmography", "idol", "pop singer", "boy band", "girl group"
+    ];
+
+    const bannedCategoryKeywords = [
+      "footballers", "cricketers", "rugby", "basketball players", "athletes", "sportspeople", "medalists",
+      "songs", "albums", "singles", "mixtapes", "music videos",
+      "films", "film characters", "television", "fictional characters", "anime", "soap operas", "cartoons",
+      "stubs"
+    ];
+
+    function isFilteredTitle(title) {
+      const lower = title.toLowerCase();
+      return bannedKeywords.some(kw => lower.includes(kw)) ||
+             lower.includes("(disambiguation)") ||
+             lower.startsWith("wikipedia:") || lower.startsWith("help:") || lower.startsWith("template:");
+    }
+
+    async function fetchCategories(title) {
+      const endpoint = "https://en.wikipedia.org/w/api.php";
+      const params = new URLSearchParams({
+        action: "query",
+        prop: "categories",
+        format: "json",
+        titles: title,
+        origin: "*",
+        cllimit: "500"
+      });
+      const res = await fetch(`${endpoint}?${params.toString()}`);
+      const data = await res.json();
+      const pages = Object.values(data.query.pages);
+      const categories = pages[0]?.categories?.map(c => c.title.toLowerCase()) || [];
+      return categories;
+    }
+
+    async function isFilteredByCategory(title) {
+      try {
+        const cats = await fetchCategories(title);
+        return cats.some(cat => bannedCategoryKeywords.some(kw => cat.includes(kw)));
+      } catch (err) {
+        console.warn("Category fetch failed:", err);
+        return false;
+      }
+    }
+
+    async function fetchValidArticle() {
+      const res = await fetch("https://en.wikipedia.org/w/api.php?origin=*&action=query&format=json&list=random&rnnamespace=0&rnlimit=10");
+      const data = await res.json();
+      const titles = data.query.random.map(p => p.title);
+
+      for (let title of titles) {
+        if (isFilteredTitle(title)) continue;
+        const filtered = await isFilteredByCategory(title);
+        if (!filtered) return title;
+      }
+      return null;
+    }
+
+    async function redirect() {
+      const title = await fetchValidArticle();
+      if (title) {
+        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(title);
+      } else {
+        document.body.innerText = "❌ No suitable article found. Try refreshing.";
+      }
+    }
+
+    redirect();
+  </script>
+</head>
+<body>
+  <p>🔍 Searching for a good Wikipedia article...</p>
+</body>
+</html>
