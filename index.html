@@ -14,6 +14,7 @@
     const REFILL_THRESHOLD = 70;
     const DROP_COUNT = 20;
     const MAX_VISITED = 1000;
+    const MIN_LENGTH = 1000;
 
     const BOOST_KEYWORDS = [
       "law", "principle", "effect", "paradox", "theorem", "rule", "phenomenon",
@@ -86,9 +87,13 @@
       }
     }
 
-    async function isFilteredByCategory(cats) {
-      const blocked = cats.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)));
-      if (blocked) console.log("⛔ Rejected by category");
+    async function isFilteredByMeta(meta) {
+      if (meta.length < MIN_LENGTH) {
+        console.log("⛔ Rejected for being too short:", meta.length);
+        return true;
+      }
+      const blocked = meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)));
+      if (blocked) console.log("⛔ Rejected by category:", meta.categories);
       return blocked;
     }
 
@@ -120,10 +125,10 @@
 
     function popFromCache() {
       const queue = getCache();
+      if (!Array.isArray(queue) || queue.length === 0) return null;
       const next = queue.shift();
       setCache(queue);
-      console.log("🎯 Popped from cache:", next?.title);
-      return next;
+      return next && next.title ? next : null;
     }
 
     function logVisit(entry) {
@@ -155,7 +160,7 @@
         const results = await Promise.allSettled(titles.map(async title => {
           if (isFilteredTitle(title)) return null;
           const meta = await fetchMeta(title);
-          if (await isFilteredByCategory(meta.categories)) return null;
+          if (await isFilteredByMeta(meta)) return null;
           return {
             title,
             length: meta.length,
@@ -181,17 +186,18 @@
     async function startRedirect() {
       await refillCacheIfNeeded();
       const next = popFromCache();
-      if (next) {
+      if (next && next.title) {
         next.visited_at = new Date().toISOString();
         logVisit({
           title: next.title,
-          categories: next.categories,
-          length: next.length,
+          categories: next.categories || [],
+          length: next.length || 0,
           visited_at: next.visited_at
         });
-       window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next.title);
+        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next.title);
       } else {
         document.body.innerText = "❌ No suitable article found.";
+        console.warn("🚫 No valid article to redirect to.");
       }
     }
 
