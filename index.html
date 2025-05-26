@@ -114,25 +114,26 @@
 
     async function startRedirect() {
       const cached = getCache();
-      if (cached.length > 0) {
-        const next = popFromCache();
+      if (cached.length === 0) {
+        document.body.innerText = "🔄 Preloading articles…";
+        await refillCache();
+      }
+      const next = popFromCache();
+      if (next) {
         window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next);
       } else {
-        document.body.innerText = "🔄 Loading new article...";
-        await refillCache();
-        startRedirect();
+        document.body.innerText = "❌ No suitable article found.";
       }
     }
 
- function exportCache() {
-  const cache = JSON.parse(localStorage.getItem("wiki_cache_v1")) || [];
-  const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "cached_wikipedia_titles.txt";
-  a.click();
-}
-
+    // ✅ Final fix: always read live from localStorage for export
+    function exportCache() {
+      const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
+      const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "cached_wikipedia_titles.txt";
+      a.click();
     }
 
     function manualRefresh() {
@@ -141,14 +142,12 @@
       alert("Cache manually refreshed.");
     }
 
-    // On page load
     window.addEventListener("load", () => {
       document.getElementById("refreshBtn").onclick = manualRefresh;
       document.getElementById("exportBtn").onclick = exportCache;
       startRedirect();
     });
 
-    // Periodically refill cache every 5 minutes
     setInterval(() => {
       if (getCache().length < MAX_CACHE) refillCache();
     }, 1000 * 60 * 5);
