@@ -10,28 +10,43 @@
   <script>
     const CACHE_KEY = "wiki_cache_v1";
     const VISITED_KEY = "visited_articles_v1";
-    const MAX_CACHE = 10;
+    const MAX_CACHE = 100;
+    const REFILL_THRESHOLD = 70;
+    const DROP_COUNT = 20;
     const MAX_VISITED = 1000;
 
+    const BOOST_KEYWORDS = [
+      "law", "principle", "effect", "paradox", "theorem", "rule", "phenomenon",
+      "conjecture", "postulate", "axiom", "problem", "model", "equation",
+      "scale", "index", "distribution", "syndrome"
+    ];
+
     const BANNED_KEYWORDS = [
-      "porn", "sexual", "nudity", "NSFW", "fetish", "hentai", "genital", "erotic", "murder", "rape",
-      "terrorist", "cartel", "assault", "execution", "abuse", "torture", "incest", "slavery", "necrophilia",
-      "song", "single", "album", "mixtape", "track", "music video", "dj", "comedian", "celebrity", "idol",
+      "porn", "sexual", "nudity", "NSFW", "fetish", "hentai", "genital", "erotic",
+      "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse",
+      "torture", "incest", "slavery", "necrophilia", "song", "single", "album",
+      "mixtape", "track", "music video", "dj", "comedian", "celebrity", "idol",
       "boy band", "girl group", "filmography", "stand-up"
     ];
 
     const BANNED_CATEGORIES = [
-      "footballers", "cricketers", "rugby", "basketball players", "athletes", "sportspeople", "medalists",
-      "songs", "albums", "singles", "mixtapes", "music videos", "films", "film characters", "television",
-      "fictional characters", "anime", "soap operas", "cartoons", "stubs"
+      "footballers", "cricketers", "rugby", "basketball players", "athletes",
+      "sportspeople", "medalists", "songs", "albums", "singles", "mixtapes",
+      "music videos", "films", "film characters", "television", "fictional characters",
+      "anime", "soap operas", "cartoons", "stubs"
     ];
-
-    const BOOST_KEYWORDS = ["law", "principle", "effect", "paradox"];
 
     const BLOCKED_PATTERNS = [
-      /\\((pitcher|cricketer|footballer|athlete)\\)/i,
+      /\((pitcher|cricketer|footballer|athlete)\)/i,
       /[0-9]{4}.*(Cup|League|Tournament|Championship)/i
     ];
+
+    function getBoostScore(title) {
+      const lower = title.toLowerCase();
+      let score = BOOST_KEYWORDS.reduce((s, kw) => s + (lower.includes(kw) ? 1 : 0), 0);
+      if (/['’]s |–/.test(title)) score += 1;
+      return score;
+    }
 
     function isFilteredTitle(title) {
       const lower = title.toLowerCase();
@@ -93,7 +108,9 @@
     function getCache() {
       try {
         return JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     }
 
     function setCache(arr) {
@@ -104,6 +121,7 @@
       const queue = getCache();
       const next = queue.shift();
       setCache(queue);
+      console.log("🎯 Popped from cache:", next?.title);
       return next;
     }
 
@@ -115,48 +133,51 @@
 
     function exportVisited() {
       const visited = JSON.parse(localStorage.getItem(VISITED_KEY)) || [];
-      const blob = new Blob([visited.join("\\n")], { type: "text/plain" });
+      const blob = new Blob([visited.join("\n")], { type: "text/plain" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "visited_wikipedia_urls.txt";
       a.click();
     }
 
-    function boostSort(titles) {
-      return titles.sort((a, b) => {
-        const aBoost = BOOST_KEYWORDS.some(k => a.toLowerCase().includes(k));
-        const bBoost = BOOST_KEYWORDS.some(k => b.toLowerCase().includes(k));
-        return (bBoost - aBoost);
-      });
-    }
-
-    async function refillCache() {
-      const titles = boostSort(await fetchRandomArticles());
-
-      const results = await Promise.allSettled(titles.map(async title => {
-        if (isFilteredTitle(title)) return null;
-        if (await isFilteredByCategory(title)) return null;
-        return title;
-      }));
-
-      const valid = results
-        .filter(r => r.status === "fulfilled" && r.value)
-        .map(r => r.value);
-
+    async function refillCacheIfNeeded() {
       const current = getCache();
-      setCache(current.concat(valid));
-      console.log("✅ Refilled cache with:", valid);
+      if (current.length >= REFILL_THRESHOLD) return;
+
+      console.log("🔄 Refilling cache...");
+
+      let valid = [...current];
+      let attempts = 0;
+
+      while (valid.length < MAX_CACHE && attempts < 3) {
+        const titles = await fetchRandomArticles();
+        const results = await Promise.allSettled(titles.map(async title => {
+          if (isFilteredTitle(title)) return null;
+          if (await isFilteredByCategory(title)) return null;
+          return { title, score: getBoostScore(title) };
+        }));
+        const passed = results
+          .filter(r => r.status === "fulfilled" && r.value)
+          .map(r => r.value);
+        valid = valid.concat(passed);
+        attempts++;
+      }
+
+      valid.sort((a, b) => b.score - a.score);
+      if (valid.length > MAX_CACHE) {
+        valid = valid.slice(0, MAX_CACHE - DROP_COUNT);
+      }
+
+      setCache(valid);
+      console.log("✅ Cache now has", valid.length, "articles.");
     }
 
     async function startRedirect() {
-      const cached = getCache();
-      if (cached.length === 0) {
-        await refillCache();
-      }
+      await refillCacheIfNeeded();
       const next = popFromCache();
       if (next) {
-        logVisit(next);
-        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next);
+        logVisit(next.title);
+        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next.title);
       } else {
         document.body.innerText = "❌ No suitable article found.";
       }
@@ -166,10 +187,6 @@
       document.getElementById("exportBtn").onclick = exportVisited;
       startRedirect();
     });
-
-    setInterval(() => {
-      if (getCache().length < MAX_CACHE) refillCache();
-    }, 1000 * 60 * 5);
   </script>
 </head>
 <body>
