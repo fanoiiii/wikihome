@@ -65,29 +65,30 @@
       return false;
     }
 
-    async function fetchCategories(title) {
+    async function fetchMeta(title) {
       const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
         action: "query",
-        prop: "categories",
         format: "json",
-        cllimit: "500",
+        prop: "categories|info",
         titles: title,
+        cllimit: "500",
         origin: "*"
       });
       try {
         const res = await fetch(url);
         const data = await res.json();
-        const pages = Object.values(data.query.pages);
-        return (pages[0]?.categories || []).map(c => c.title.toLowerCase());
+        const page = Object.values(data.query.pages)[0];
+        const categories = (page.categories || []).map(c => c.title.toLowerCase());
+        const length = page.length || 0;
+        return { categories, length };
       } catch {
-        return [];
+        return { categories: [], length: 0 };
       }
     }
 
-    async function isFilteredByCategory(title) {
-      const cats = await fetchCategories(title);
+    async function isFilteredByCategory(cats) {
       const blocked = cats.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)));
-      if (blocked) console.log("⛔ Rejected by category:", title);
+      if (blocked) console.log("⛔ Rejected by category");
       return blocked;
     }
 
@@ -125,18 +126,18 @@
       return next;
     }
 
-    function logVisit(title) {
+    function logVisit(entry) {
       const visited = JSON.parse(localStorage.getItem(VISITED_KEY)) || [];
-      visited.push(title);
+      visited.push(entry);
       localStorage.setItem(VISITED_KEY, JSON.stringify(visited.slice(-MAX_VISITED)));
     }
 
     function exportVisited() {
       const visited = JSON.parse(localStorage.getItem(VISITED_KEY)) || [];
-      const blob = new Blob([visited.join("\n")], { type: "text/plain" });
+      const blob = new Blob([JSON.stringify(visited, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "visited_wikipedia_urls.txt";
+      a.download = "visited_wikipedia_articles.json";
       a.click();
     }
 
@@ -153,12 +154,17 @@
         const titles = await fetchRandomArticles();
         const results = await Promise.allSettled(titles.map(async title => {
           if (isFilteredTitle(title)) return null;
-          if (await isFilteredByCategory(title)) return null;
-          return { title, score: getBoostScore(title) };
+          const meta = await fetchMeta(title);
+          if (await isFilteredByCategory(meta.categories)) return null;
+          return {
+            title,
+            length: meta.length,
+            categories: meta.categories,
+            visited_at: null,
+            score: getBoostScore(title)
+          };
         }));
-        const passed = results
-          .filter(r => r.status === "fulfilled" && r.value)
-          .map(r => r.value);
+        const passed = results.filter(r => r.status === "fulfilled" && r.value).map(r => r.value);
         valid = valid.concat(passed);
         attempts++;
       }
@@ -176,7 +182,13 @@
       await refillCacheIfNeeded();
       const next = popFromCache();
       if (next) {
-        logVisit(next.title);
+        next.visited_at = new Date().toISOString();
+        logVisit({
+          title: next.title,
+          categories: next.categories,
+          length: next.length,
+          visited_at: next.visited_at
+        });
         window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next.title);
       } else {
         document.body.innerText = "❌ No suitable article found.";
@@ -191,6 +203,6 @@
 </head>
 <body>
   <p>🔍 Loading a Wikipedia article…</p>
-  <button id="exportBtn">⬇️ Export Visited URLs</button>
+  <button id="exportBtn">⬇️ Export Visited Articles</button>
 </body>
 </html>
