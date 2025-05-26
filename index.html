@@ -15,7 +15,7 @@
     const MAX_VISITED = 1000;
     const BANNED_KEYWORDS = [
       "football", "soccer", "season", "team", "league", "club", "town", "village", "municipality",
-      "commune", "city", "county", "province", "suburb", "census", "parish", "historian", "biography",
+      "commune", " "city", "county", "province", "suburb", "census", "parish", "historian", "biography",
       "cricketer", "baseball", "basketball", "rugby", "coach", "referee", "player", "wrestler",
       "olympic", "athlete", "rapper", "singer", "porn", "sexual", "nudity", "NSFW", "fetish", "hentai",
       "genital", "erotic", "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse",
@@ -127,13 +127,11 @@
       }
       const current = getCache();
       setCache(current.concat(valid));
-      console.log("🔄 Cache refilled with", valid.length, "new articles.");
     }
 
     async function startRedirect() {
       const cached = getCache();
       if (cached.length === 0) {
-        document.body.innerText = "🔄 Preloading articles…";
         await refillCache();
       }
       const next = popFromCache();
@@ -145,14 +143,7 @@
       }
     }
 
-    function manualRefresh() {
-      setCache([]);
-      refillCache();
-      alert("Cache manually refreshed.");
-    }
-
     window.addEventListener("load", () => {
-      document.getElementById("refreshBtn").onclick = manualRefresh;
       document.getElementById("exportBtn").onclick = exportVisited;
       startRedirect();
     });
@@ -164,7 +155,6 @@
 </head>
 <body>
   <p>🔍 Loading a Wikipedia article…</p>
-  <button id="refreshBtn">🔄 Refresh Cache</button>
   <button id="exportBtn">⬇️ Export Visited URLs</button>
 </body>
 </html>
