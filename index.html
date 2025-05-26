@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,7 +10,9 @@
   </style>
   <script>
     const CACHE_KEY = "wiki_cache_v1";
+    const VISITED_KEY = "visited_articles_v1";
     const MAX_CACHE = 10;
+    const MAX_VISITED = 1000;
     const BANNED_KEYWORDS = [
       "football", "soccer", "season", "team", "league", "club", "town", "village", "municipality",
       "commune", "city", "county", "province", "suburb", "census", "parish", "historian", "biography",
@@ -90,6 +93,21 @@
       return next;
     }
 
+    function logVisit(title) {
+      const visited = JSON.parse(localStorage.getItem(VISITED_KEY)) || [];
+      visited.push(title);
+      localStorage.setItem(VISITED_KEY, JSON.stringify(visited.slice(-MAX_VISITED)));
+    }
+
+    function exportVisited() {
+      const visited = JSON.parse(localStorage.getItem(VISITED_KEY)) || [];
+      const blob = new Blob([visited.join("\n")], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "visited_wikipedia_urls.txt";
+      a.click();
+    }
+
     function boostSort(titles) {
       return titles.sort((a, b) => {
         const aBoost = BOOST_KEYWORDS.some(k => a.toLowerCase().includes(k));
@@ -120,20 +138,11 @@
       }
       const next = popFromCache();
       if (next) {
+        logVisit(next);
         window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next);
       } else {
         document.body.innerText = "❌ No suitable article found.";
       }
-    }
-
-    // ✅ Final fix: always read live from localStorage for export
-    function exportCache() {
-      const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
-      const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "cached_wikipedia_titles.txt";
-      a.click();
     }
 
     function manualRefresh() {
@@ -144,7 +153,7 @@
 
     window.addEventListener("load", () => {
       document.getElementById("refreshBtn").onclick = manualRefresh;
-      document.getElementById("exportBtn").onclick = exportCache;
+      document.getElementById("exportBtn").onclick = exportVisited;
       startRedirect();
     });
 
@@ -156,6 +165,6 @@
 <body>
   <p>🔍 Loading a Wikipedia article…</p>
   <button id="refreshBtn">🔄 Refresh Cache</button>
-  <button id="exportBtn">⬇️ Export Cache</button>
+  <button id="exportBtn">⬇️ Export Visited URLs</button>
 </body>
 </html>
