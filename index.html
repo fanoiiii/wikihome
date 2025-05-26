@@ -124,13 +124,15 @@
       }
     }
 
-    function exportCache() {
-      const cache = getCache();
-      const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "cached_wikipedia_titles.txt";
-      a.click();
+ function exportCache() {
+  const cache = JSON.parse(localStorage.getItem("wiki_cache_v1")) || [];
+  const blob = new Blob([cache.join("\\n")], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cached_wikipedia_titles.txt";
+  a.click();
+}
+
     }
 
     function manualRefresh() {
