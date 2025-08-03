@@ -6019,8 +6019,31 @@
     const DAMPING_WINDOW_MS = 5 * 30 * 24 * 60 * 60 * 1000; // 5 months
     const DAMPING_FACTOR = 0.2; // 80% less likely if visited recently
 
+    const CACHE_KEY = "wiki_cache_v1";
+    const VISITED_KEY = "visited_articles_v1";
+    const MAX_CACHE = 100;
+    const REFILL_THRESHOLD = 70;
+    const DROP_COUNT = 20;
+    const MIN_LENGTH = 1800;
+
+    const rejectedArticles = [];
+
+    const BANNED_KEYWORDS = ["porn", "sexual", "nudity", "NSFW", "fetish", "hentai", "genital", "erotic",
+      "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse", "torture", "incest", "slavery", "necrophilia"];
+    const BANNED_CATEGORIES = ["football", "basketball", "rugby", "album", "songs", "mixtape", "cricketer", "television", "soap opera", "anime", "manga", "pornography", "wrestler", "wrestling"];
+    const BLOCKED_PATTERNS = [
+  /\b\d{4}–\d{2,4}\b/,                              // year ranges like 1999–2000
+  /\b(season|cup|league|tournament)\b/i,            // sports structure
+  /\bmatch|final|fixture|semifinal\b/i,             // game events
+  /\b(at|in)\s+\d{4}\b/i,                           // events by year
+  /\bdisambiguation\b/i,                            // disambiguation pages
+  /^list of\b/i,                                    // low-value lists
+  /\bpresidential|parliamentary|election\b/i,       // politics
+  /\bgames|heat|medal|pole vault\b/i                // olympics
+    ];
+
     function getVisitedMap() {
-      const v = JSON.parse(localStorage.getItem("visited_articles_v1") || "[]");
+      const v = JSON.parse(localStorage.getItem(VISITED_KEY) || "[]");
       return v.reduce((m, e) => { m[e.title] = e.visited_at; return m; }, {});
     }
 
@@ -6041,16 +6064,142 @@
       return selected;
     }
 
-    // Just a test display (actual redirect logic should go here)
+    async function fetchRandomArticles(n = 10) {
+      const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
+        action: "query", format: "json", list: "random", rnnamespace: 0, rnlimit: n, origin: "*"
+      });
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.query.random.map(p => p.title);
+    }
+
+    function getCache() {
+      try {
+        return JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
+      } catch { return []; }
+    }
+
+    function setCache(arr) {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(arr.slice(0, MAX_CACHE)));
+    }
+
+    function popFromCache() {
+      const queue = getCache();
+      if (!Array.isArray(queue) || queue.length === 0) return null;
+      const next = queue.shift();
+      setCache(queue);
+      return next;
+    }
+
+    function logVisit(entry) {
+      const visited = JSON.parse(localStorage.getItem(VISITED_KEY) || "[]");
+      visited.push(entry);
+      localStorage.setItem(VISITED_KEY, JSON.stringify(visited.slice(-1000)));
+    }
+
+    function exportVisited() {
+      const visited = JSON.parse(localStorage.getItem(VISITED_KEY) || "[]");
+      const blob = new Blob([JSON.stringify(visited, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "visited_wikipedia_articles.json";
+      a.click();
+    }
+
+    function exportRejected() {
+      const blob = new Blob([JSON.stringify(rejectedArticles, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "rejected_wikipedia_articles.json";
+      a.click();
+    }
+
+    async function fetchMeta(title) {
+      const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
+        action: "query", format: "json", prop: "categories|info", titles: title, cllimit: "500", origin: "*"
+      });
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const page = Object.values(data.query.pages)[0];
+        const categories = (page.categories || []).map(c => c.title.toLowerCase());
+        const length = page.length || 0;
+        return { categories, length };
+      } catch {
+        return { categories: [], length: 0 };
+      }
+    }
+
+ async function isFiltered(title, meta) {
+  const lower = title.toLowerCase();
+  if (BANNED_KEYWORDS.some(k => lower.includes(k)) ||
+      BLOCKED_PATTERNS.some(re => re.test(title)) ||
+      meta.length < MIN_LENGTH ||
+      meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))) {
+    rejectedArticles.push({ title, reason: "filtered", length: meta.length, categories: meta.categories });
+    return true;
+  }
+  return false;
+    }
+
+    async function refillCacheIfNeeded() {
+      const cache = getCache();
+      if (cache.length >= REFILL_THRESHOLD) return;
+
+      const visitedMap = getVisitedMap();
+      const toFetch = MAX_CACHE - cache.length;
+      const boostCount = Math.round(toFetch * BOOST_POOL_SHARE);
+      const randCount = toFetch - boostCount;
+
+      const boosted = weightedPick(BOOSTED_TITLES, boostCount, visitedMap);
+      const valid = [];
+
+      for (const title of boosted) {
+        const meta = await fetchMeta(title);
+        if (!(await isFiltered(title, meta))) {
+          valid.push({ title, length: meta.length, categories: meta.categories, visited_at: null });
+        }
+      }
+
+      let attempts = 0;
+      while (valid.length < MAX_CACHE && attempts < 5) {
+        const titles = await fetchRandomArticles(randCount);
+        for (const title of titles) {
+          const meta = await fetchMeta(title);
+          if (!(await isFiltered(title, meta))) {
+            valid.push({ title, length: meta.length, categories: meta.categories, visited_at: null });
+          }
+          if (valid.length >= MAX_CACHE) break;
+        }
+        attempts++;
+      }
+
+      setCache(cache.concat(valid).slice(0, MAX_CACHE));
+    }
+
+    async function startRedirect() {
+      await refillCacheIfNeeded();
+      const next = popFromCache();
+      if (next && next.title) {
+        next.visited_at = new Date().toISOString();
+        logVisit(next);
+        window.location.href = "https://en.wikipedia.org/wiki/" + encodeURIComponent(next.title);
+      } else {
+        document.body.innerText = "❌ No valid article found.";
+      }
+    }
+
     window.onload = () => {
-      console.log("Boosted titles loaded:", BOOSTED_TITLES.length);
+      document.getElementById("exportVisitedBtn").onclick = exportVisited;
+      document.getElementById("exportRejectedBtn").onclick = exportRejected;
+      startRedirect();
     };
   </script>
 </head>
 <body>
-  <h1>🔍 Smart Wikipedia Homepage</h1>
-  <p>This template loads and manages a boosted article cache for your homepage.</p>
-  <button onclick="console.log(BOOSTED_TITLES.slice(0, 10))">View Boosted Titles</button>
+  <p>🔍 Loading Wikipedia article…</p>
+  <button id="exportVisitedBtn">⬇️ Export Visited</button>
+  <button id="exportRejectedBtn">⬇️ Export Rejected</button>
 </body>
 </html>
 
