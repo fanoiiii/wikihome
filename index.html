@@ -151,6 +151,9 @@
 
       const boosted = weightedPick(BOOSTED_TITLES, boostCount, visitedMap);
       const valid = [];
+      const percentBoost = (boostCount / toFetch * 100).toFixed(1);  // rounded %
+console.log("→ Boost target:", boostCount, "Pulled:", boosted.length, "Boost %:", percentBoost + "%");
+
 
       for (const title of boosted) {
         const meta = await fetchMeta(title);
