@@ -9,8 +9,8 @@
   </style>
   <script>
     // ✅ BOOSTED ARTICLE TITLES
-  //const BOOSTED_TITLES = [
-  "A. C. Grayling",
+    const BOOSTED_TITLES = [
+      "A. C. Grayling",
   "A. J. Aitken",
   "AF+BG theorem",
   "ATS theorem",
@@ -6009,20 +6009,19 @@
   "Łoś' theorem",
   "Śleszyński–Pringsheim theorem",
   "Švarc–Milnor lemma",
-  "Ω-logic",
-  //];
+  "Ω-logic"
+    ];
 
-    // ⚙️ Boost logic configuration
-    const BOOST_POOL_SHARE = 0.20; // 20% of cache refill from boosted pool
-    const DAMPING_WINDOW_MS = 5 * 30 * 24 * 60 * 60 * 1000; // 5 months
-    const DAMPING_FACTOR = 0.2; // 80% less likely if visited recently
+    const BOOST_POOL_SHARE = 0.20;
+    const DAMPING_WINDOW_MS = 5 * 30 * 24 * 60 * 60 * 1000;
+    const DAMPING_FACTOR = 0.2;
 
     const CACHE_KEY = "wiki_cache_v1";
     const VISITED_KEY = "visited_articles_v1";
     const MAX_CACHE = 100;
     const REFILL_THRESHOLD = 70;
     const DROP_COUNT = 20;
-    const MIN_LENGTH = 1800;
+    const MIN_LENGTH = 3000;
 
     const rejectedArticles = [];
 
@@ -6030,15 +6029,15 @@
       "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse", "torture", "incest", "slavery", "necrophilia"];
     const BANNED_CATEGORIES = ["football", "basketball", "rugby", "album", "songs", "mixtape", "cricketer", "television", "soap opera", "anime", "manga", "pornography", "wrestler", "wrestling"];
     const BLOCKED_PATTERNS = [
-  /\b\d{4}–\d{2,4}\b/,                              // year ranges like 1999–2000
-  /\b(season|cup|league|tournament)\b/i,            // sports structure
-  /\bmatch|final|fixture|semifinal\b/i,             // game events
-  /\b(at|in)\s+\d{4}\b/i,                           // events by year
-  /\bdisambiguation\b/i,                            // disambiguation pages
-  /^list of\b/i,                                    // low-value lists
-  /\bpresidential|parliamentary|election\b/i,       // politics
-  /\bgames|heat|medal|pole vault\b/i                // olympics
-    ];
+  /\b\d{4}–\d{2,4}\b/,
+  /\b(season|cup|league|tournament)\b/i,
+  /\bmatch|final|fixture|semifinal\b/i,
+  /\b(at|in)\s+\d{4}\b/i,
+  /\bdisambiguation\b/i,
+  /^list of\b/i,
+  /\bpresidential|parliamentary|election\b/i,
+  /\bgames|heat|medal|pole vault\b/i,
+];
 
     function getVisitedMap() {
       const v = JSON.parse(localStorage.getItem(VISITED_KEY) || "[]");
@@ -6128,16 +6127,16 @@
       }
     }
 
- async function isFiltered(title, meta) {
-  const lower = title.toLowerCase();
-  if (BANNED_KEYWORDS.some(k => lower.includes(k)) ||
-      BLOCKED_PATTERNS.some(re => re.test(title)) ||
-      meta.length < MIN_LENGTH ||
-      meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))) {
-    rejectedArticles.push({ title, reason: "filtered", length: meta.length, categories: meta.categories });
-    return true;
-  }
-  return false;
+    async function isFiltered(title, meta) {
+      const lower = title.toLowerCase();
+      if (BANNED_KEYWORDS.some(k => lower.includes(k)) ||
+          BLOCKED_PATTERNS.some(re => re.test(title)) ||
+          meta.length < MIN_LENGTH ||
+          meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))) {
+        rejectedArticles.push({ title, reason: "filtered", length: meta.length, categories: meta.categories });
+        return true;
+      }
+      return false;
     }
 
     async function refillCacheIfNeeded() {
@@ -6200,4 +6199,3 @@
   <button id="exportRejectedBtn">⬇️ Export Rejected</button>
 </body>
 </html>
-
