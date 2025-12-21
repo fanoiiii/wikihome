@@ -129,6 +129,7 @@
     }
 
     async function isFiltered(title, meta) {
+      console.log("FILTER CHECK:", title);
       const lower = title.toLowerCase();
       if (BANNED_KEYWORDS.some(k => lower.includes(k)) ||
           BLOCKED_PATTERNS.some(re => re.test(title)) ||
