@@ -202,16 +202,16 @@
       }
     }
 
-    async function isFiltered(title, meta) {
+  async function isFiltered(title, meta) {
   const lower = title.toLowerCase();
 
   if (BANNED_KEYWORDS.some(k => lower.includes(k))) {
-    rejectedArticles.push({ title, reason: "banned_keyword", length: meta.length, categories: meta.categories });
+    rejectedArticles.push({ title, reason: "keyword", length: meta.length, categories: meta.categories });
     return true;
   }
 
   if (BLOCKED_PATTERNS.some(re => re.test(title))) {
-    rejectedArticles.push({ title, reason: "blocked_pattern", length: meta.length, categories: meta.categories });
+    rejectedArticles.push({ title, reason: "pattern", length: meta.length, categories: meta.categories });
     return true;
   }
 
@@ -221,12 +221,14 @@
   }
 
   if (meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))) {
-    rejectedArticles.push({ title, reason: "banned_category", length: meta.length, categories: meta.categories });
+    rejectedArticles.push({ title, reason: "category", length: meta.length, categories: meta.categories });
     return true;
   }
 
   return false;
 }
+
+         
 
     async function refillCacheIfNeeded() {
       const cache = getCache();
