@@ -168,7 +168,23 @@
       a.download = "rejected_wikipedia_articles.json";
       a.click();
     }
+         
+    async function diagnosticSampleRun(n = 1000) {
+  rejectedArticles.length = 0;
 
+  for (let i = 0; i < n; i += 10) {
+    const titles = await fetchRandomArticles(10);
+    for (const title of titles) {
+      const meta = await fetchMeta(title);
+      await isFiltered(title, meta); // logs rejections
+    }
+  }
+
+  console.log("Sample run complete.");
+  console.log("Rejected count:", rejectedArticles.length);
+}
+
+         
     async function fetchMeta(title) {
       const url = "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({
         action: "query", format: "json", prop: "categories|info", titles: title, cllimit: "500", origin: "*"
@@ -199,21 +215,6 @@
       }
       return false;
     }
-async function diagnosticSampleRun(n = 1000) {
-  rejectedArticles.length = 0;
-
-  for (let i = 0; i < n; i += 10) {
-    const titles = await fetchRandomArticles(10);
-    for (const title of titles) {
-      const meta = await fetchMeta(title);
-      await isFiltered(title, meta); // logs rejections
-    }
-  }
-
-  console.log("Sample run complete.");
-  console.log("Rejected count:", rejectedArticles.length);
-}
-
     async function refillCacheIfNeeded() {
       const cache = getCache();
       if (cache.length >= REFILL_THRESHOLD) return;
