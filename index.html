@@ -203,18 +203,31 @@
     }
 
     async function isFiltered(title, meta) {
-      const lower = title.toLowerCase();
-      if (
-        BANNED_KEYWORDS.some(k => lower.includes(k)) ||
-        BLOCKED_PATTERNS.some(re => re.test(title)) ||
-        meta.length < MIN_LENGTH ||
-        meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))
-      ) {
-        rejectedArticles.push({ title, reason: "filtered", length: meta.length, categories: meta.categories });
-        return true;
-      }
-      return false;
-    }
+  const lower = title.toLowerCase();
+
+  if (BANNED_KEYWORDS.some(k => lower.includes(k))) {
+    rejectedArticles.push({ title, reason: "banned_keyword", length: meta.length, categories: meta.categories });
+    return true;
+  }
+
+  if (BLOCKED_PATTERNS.some(re => re.test(title))) {
+    rejectedArticles.push({ title, reason: "blocked_pattern", length: meta.length, categories: meta.categories });
+    return true;
+  }
+
+  if (meta.length < MIN_LENGTH) {
+    rejectedArticles.push({ title, reason: "too_short", length: meta.length, categories: meta.categories });
+    return true;
+  }
+
+  if (meta.categories.some(cat => BANNED_CATEGORIES.some(b => cat.includes(b)))) {
+    rejectedArticles.push({ title, reason: "banned_category", length: meta.length, categories: meta.categories });
+    return true;
+  }
+
+  return false;
+}
+
     async function refillCacheIfNeeded() {
       const cache = getCache();
       if (cache.length >= REFILL_THRESHOLD) return;
