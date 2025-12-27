@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+       <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -199,6 +199,20 @@
       }
       return false;
     }
+async function diagnosticSampleRun(n = 1000) {
+  rejectedArticles.length = 0;
+
+  for (let i = 0; i < n; i += 10) {
+    const titles = await fetchRandomArticles(10);
+    for (const title of titles) {
+      const meta = await fetchMeta(title);
+      await isFiltered(title, meta); // logs rejections
+    }
+  }
+
+  console.log("Sample run complete.");
+  console.log("Rejected count:", rejectedArticles.length);
+}
 
     async function refillCacheIfNeeded() {
       const cache = getCache();
