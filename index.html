@@ -238,7 +238,7 @@ async function refillCacheIfNeeded() {
    8. SAMPLING (FOR REJECTED DATASET)
 ============================================================ */
 
-async function sampleRejectedArticles(total = 10000, batchSize = 50) {
+async function sampleRejectedArticles(total = 10000, batchSize = 150) {
   console.log("🧪 Starting rejection sampling:", total);
   let processed = 0;
 
