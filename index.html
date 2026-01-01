@@ -81,7 +81,7 @@ function getVisited() {
 function logVisit(entry) {
   const v = getVisited();
   v.push(entry);
-  localStorage.setItem(VISITED_KEY, JSON.stringify(v.slice(-1000)));
+  localStorage.setItem(VISITED_KEY, JSON.stringify(visited));
 }
 
 function getRejected() {
