@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,6 +18,7 @@
     ============================================================ */
 
     const BOOST_POOL_SHARE = 0.20;
+    const SERENDIPITY_SHARE = 0.05;
     const DAMPING_WINDOW_MS = 5 * 30 * 24 * 60 * 60 * 1000;
     const DAMPING_FACTOR = 0.2;
 
@@ -65,6 +67,21 @@
       "murder", "rape", "terrorist", "cartel", "assault", "execution", "abuse",
       "torture", "incest", "slavery", "necrophilia"
     ];
+
+    function escapeRegex(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    const BANNED_KEYWORD_PATTERNS = BANNED_KEYWORDS.map(keyword =>
+      new RegExp(
+        `(?:^|[^\\p{L}\\p{N}])${escapeRegex(keyword)}(?:$|[^\\p{L}\\p{N}])`,
+        "iu"
+      )
+    );
+
+    function hasBannedKeyword(title) {
+      return BANNED_KEYWORD_PATTERNS.some(pattern => pattern.test(title));
+    }
 
     const BANNED_CATEGORIES = [
       "football", "basketball", "rugby", "album", "songs", "mixtape",
@@ -237,7 +254,23 @@
       const queue = getCache();
       if (!queue.length) return null;
 
-      const next = queue.shift();
+      const cacheSizeAtSelection = queue.length;
+      const highestBoostScoreInCache = Math.max(
+        ...queue.map(entry => entry.boostScore || 0)
+      );
+
+      const useSerendipity = Math.random() < SERENDIPITY_SHARE;
+      const selectedIndex = useSerendipity
+        ? Math.floor(Math.random() * queue.length)
+        : 0;
+
+      const [next] = queue.splice(selectedIndex, 1);
+
+      next.source = next.source || "legacy";
+      next.selectionMode = useSerendipity ? "serendipity" : "ranked";
+      next.cacheSizeAtSelection = cacheSizeAtSelection;
+      next.highestBoostScoreInCache = highestBoostScoreInCache;
+
       setCache(queue);
       return next;
     }
@@ -701,9 +734,7 @@
     ============================================================ */
 
     async function isFiltered(title, meta) {
-      const lower = title.toLowerCase();
-
-      if (BANNED_KEYWORDS.some(keyword => lower.includes(keyword))) {
+      if (hasBannedKeyword(title)) {
         await logRejected({
           title,
           reason: "keyword",
@@ -758,7 +789,8 @@
       valid,
       seenTitles,
       rejectedTitles,
-      targetValidCount
+      targetValidCount,
+      source
     ) {
       const candidates = [];
 
@@ -796,6 +828,7 @@
           length: meta.length,
           categories: meta.categories,
           boostScore: computeBoostScore(meta),
+          source,
           visited_at: null
         });
 
@@ -854,7 +887,8 @@
         valid,
         seenTitles,
         rejectedTitles,
-        toFetch
+        toFetch,
+        "manual_boost"
       );
 
       // 2) Random Wikipedia titles fill the remaining slots.
@@ -876,7 +910,8 @@
           valid,
           seenTitles,
           rejectedTitles,
-          toFetch
+          toFetch,
+          "random"
         );
 
         attempts++;
@@ -1025,4 +1060,3 @@
   <button id="exportRejectedBtn">⬇️ Export Rejected</button>
 </body>
 </html>
-
