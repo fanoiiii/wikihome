@@ -81,7 +81,7 @@ function getVisited() {
 function logVisit(entry) {
   const v = getVisited();
   v.push(entry);
-  localStorage.setItem(VISITED_KEY, JSON.stringify(visited));
+  localStorage.setItem(VISITED_KEY, JSON.stringify(v));
 }
 
 function getRejected() {
@@ -220,14 +220,14 @@ async function refillCacheIfNeeded() {
     }
   }
 
-  while (valid.length < MAX_CACHE) {
+  while (valid.length < toFetch) {
     const titles = await fetchRandomArticles(randCount);
     for (const title of titles) {
       const meta = await fetchMeta(title);
       if (!(await isFiltered(title, meta))) {
         valid.push({ title, ...meta, visited_at: null });
       }
-      if (valid.length >= MAX_CACHE) break;
+      if (valid.length >= toFetch) break;
     }
   }
 
@@ -303,4 +303,3 @@ window.onload = () => {
 <button id="exportRejectedBtn">⬇️ Export Rejected</button>
 </body>
 </html>
-
